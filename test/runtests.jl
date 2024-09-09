@@ -4,6 +4,7 @@ using Atomistic
 
 using AtomsBase
 using InteratomicPotentials
+using AtomsCalculators
 using Molly
 #using NBodySimulator
 using StaticArrays

@@ -2,6 +2,7 @@
 # Integration with InteratomicPotentials
 # -----------------------------------------------------------------------------
 const E_DIM = dimension(u"eV")
+const EN_DIM = dimension(u"kJ * mol^-1") # need to account for annoying per atom case
 const L_DIM = dimension(u"Å")
 
 const DEF_EUNIT = u"eV"
@@ -13,17 +14,27 @@ struct InteratomicPotentialInter{P<:AbstractPotential}
     potential::P
     energy_units::Unitful.Unitlike 
     length_units::Unitful.Unitlike
+    force_units::Unitful.Unitlike
 
     # internal constructor, ensuring energy units and length units have correct dimensions
-    ( InteratomicPotentialInter(pot::AbstractPotential, 
-                                eu::Union{NOUNIT_T, Unitful.Units{UE,E_DIM,nothing}} = DEF_EUNIT,
-                                lu::Union{NOUNIT_T, Unitful.Units{UL,L_DIM,nothing}} = DEF_LUNIT)
-                                where {UE,UL} = new{typeof(pot)}(pot,eu,lu) )
+    function InteratomicPotentialInter(
+                                pot::P, 
+                                eu::Union{NOUNIT_T, Unitful.Units{UE,E_DIM,nothing}, Unitful.Units{UE,EN_DIM,nothing}} = DEF_EUNIT,
+                                lu::Union{NOUNIT_T, Unitful.Units{UL,L_DIM,nothing}} = DEF_LUNIT) where {P,UE,UL}
+        if eu != NoUnits
+            fu = eu/lu
+        else
+            fu = NoUnits
+        end
+
+        return new{P}(pot,eu,lu,fu) 
+    end
 end
 
-function Molly.forces(inter::InteratomicPotentialInter, 
+function AtomsCalculators.forces( 
                       sys::AbstractSystem,
-                      neighbors = nothing;
+                      inter::InteratomicPotentialInter;
+                      neighbors = nothing,
                       n_threads = Threads.nthreads())
     forces = InteratomicPotentials.force(sys,inter.potential)
 
@@ -31,22 +42,23 @@ function Molly.forces(inter::InteratomicPotentialInter,
     # but! that may be because other parts of IP.jl are very slow, e.g. neighbor list construction
     if eltype(forces[1]) <: Unitful.Quantity 
         if inter.energy_units != NoUnits
-            forces = [uconvert.(inter.energy_units/inter.length_units, fi)
+            forces = [uconvert.(inter.force_units, fi)
                      for fi in forces]
         else
             forces = [ustrip.(fi)
                      for fi in forces]
         end
     elseif eltype(forces[1]) <: Real && inter.energy_units != NoUnits
-        forces = forces * inter.energy_units/inter.length_units
+        forces = forces * inter.force_units
     end
 
     forces
 end
 
-function Molly.potential_energy(inter::InteratomicPotentialInter, 
+function AtomsCalculators.potential_energy( 
                                 sys::AbstractSystem,
-                                neighbors = nothing;
+                                inter::InteratomicPotentialInter;
+                                neighbors = nothing,
                                 n_threads = Threads.nthreads())
 
     energy = InteratomicPotentials.potential_energy(sys,inter.potential)
@@ -64,3 +76,5 @@ function Molly.potential_energy(inter::InteratomicPotentialInter,
     energy
 end
 
+AtomsCalculators.energy_unit(inter::InteratomicPotentialInter) = inter.energy_units
+AtomsCalculators.length_unit(inter::InteratomicPotentialInter) = inter.length_units

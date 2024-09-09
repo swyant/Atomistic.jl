@@ -36,30 +36,37 @@ inter_ace_unitless = InteratomicPotentialInter(lb_tial,NoUnits, NoUnits)
 @test typeof(inter_ace_tial.potential) <: AbstractPotential
 @test dimension(inter_ace_tial.energy_units) == dimension(u"J")
 @test dimension(inter_ace_tial.length_units) == dimension(u"m")
+@test inter_ace_tial.force_units == u"eV/Å"
 @test dimension(inter_ace_unitless.energy_units) == dimension(inter_ace_unitless.length_units) == NoDims
 
-# Check direct Molly.forces and Molly.potential_energy call
-molly_naive_forces = Molly.forces(inter_ace_tial, small_nonorth_sys)
-molly_naive_pe     = Molly.potential_energy(inter_ace_tial,small_nonorth_sys)
-@test ip_forces*u"eV/Å" == molly_naive_forces
-@test ip_pe*u"eV" == molly_naive_pe
+# check AtomsCalculators forces/potential_energy
+ac_forces = AtomsCalculators.forces(small_nonorth_sys,inter_ace_tial)
+ac_pe     = AtomsCalculators.potential_energy(small_nonorth_sys, inter_ace_tial)
+@test ip_forces*u"eV/Å" == ac_forces 
+@test ip_pe*u"eV" == ac_pe
 
-molly_naive_f_unitless  = Molly.forces(inter_ace_unitless, small_nonorth_sys)
-molly_naive_pe_unitless = Molly.potential_energy(inter_ace_unitless,small_nonorth_sys)
-
-@test molly_naive_f_unitless == ip_forces
-@test molly_naive_pe_unitless == ip_pe
+ac_forces_unitless = AtomsCalculators.forces(small_nonorth_sys,inter_ace_unitless)
+ac_pe_unitless     = AtomsCalculators.potential_energy(small_nonorth_sys, inter_ace_unitless)
+@test ip_forces == ac_forces_unitless 
+@test ip_pe == ac_pe_unitless
 
 #set up Molly.System 
 general_inters_tial = (inter_ace_tial,)
 
-m_sys_tial = System(Molly.System(small_nonorth_sys,
-                                 u"eV",
-                                 u"eV/Å");
+m_sys_tial = System(Molly.System(small_nonorth_sys;
+                                 energy_units=u"eV",
+                                 force_units=u"eV/Å");
                     general_inters=general_inters_tial, 
                     loggers=(force=ForceLogger(typeof(1.0u"eV/Å"), 1),
                              energy=PotentialEnergyLogger(typeof(1.0u"eV"),1)
                     ));
+
+
+# Check direct Molly.forces and Molly.potential_energy call
+molly_forces = Molly.forces(m_sys_tial)
+molly_pe     = Molly.potential_energy(m_sys_tial)
+@test ip_forces*u"eV/Å" == molly_forces
+@test ip_pe*u"eV" == molly_pe
 
 simulator = VelocityVerlet(
     dt=0.001u"ps",
@@ -86,7 +93,6 @@ ip_pe_100 = InteratomicPotentials.potential_energy(m_sys_tial,lb_tial)
 
 @test all(Vector.(f100_tial) .≈ ip_forces_100 * u"eV/Å")
 @test e100_tial ≈ ip_pe_100 * u"eV"
-
 
 # TODO: test a unitless molly system as well
 # TODO: integration test using AtomsIO and staticAtoms

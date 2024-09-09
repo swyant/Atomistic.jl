@@ -14,6 +14,7 @@ using StaticArrays
 #@reexport using Unitful, UnitfulAtomic
 
 using Molly
+using AtomsCalculators
 #using NBodySimulator
 
 #using PeriodicTable
